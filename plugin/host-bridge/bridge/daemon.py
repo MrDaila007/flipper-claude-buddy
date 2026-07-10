@@ -370,9 +370,18 @@ class Daemon:
         # Build truncated->full mapping; Flipper menu items are 26 chars max
         MENU_ITEM_MAX = 26
         self._cmd_map = {}
+        collisions = []
         for cmd in commands:
             truncated = cmd[:MENU_ITEM_MAX]
+            if truncated in self._cmd_map and self._cmd_map[truncated] != cmd:
+                collisions.append((truncated, self._cmd_map[truncated], cmd))
             self._cmd_map[truncated] = cmd
+        for trunc, existing, new_cmd in collisions:
+            log.warning(
+                "Menu collision: %r and %r both truncate to %r — "
+                "rename one to stay unique within 26 chars",
+                existing, new_cmd, trunc,
+            )
 
         result = sorted(self._cmd_map.keys())
         custom_count = len(result) - len(self.BUILTIN_COMMANDS)
@@ -614,7 +623,18 @@ class Daemon:
             pass
         finally:
             await self._stop_space_repeat()
-            self.serial.close()
+            # Await the transport close so the Flipper sees a clean BLE
+            # disconnect before this process exits. Without this, the next
+            # bridge process (spawned when the user starts a new Claude
+            # session) can't reconnect until the Flipper's link-supervision
+            # timeout fires.
+            try:
+                await asyncio.wait_for(self.serial.aclose(), timeout=3.0)
+            except asyncio.TimeoutError:
+                log.warning("Serial aclose timed out; forcing close")
+                self.serial.close()
+            except Exception as e:
+                log.warning("Serial aclose error: %s", e)
             await self.ipc.stop()
             log.info("=" * 60)
             log.info("Bridge daemon stopped")
