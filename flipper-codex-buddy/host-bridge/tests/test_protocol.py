@@ -128,14 +128,21 @@ class TestStateMsg:
         msg = json.loads(protocol.state_msg(True))
         assert msg["t"] == "state"
         assert msg["d"]["claude"] is True
+        assert msg["d"]["host"] == "codex"
 
     def test_connected_false(self):
         msg = json.loads(protocol.state_msg(False))
         assert msg["d"]["claude"] is False
+        assert msg["d"]["host"] == "codex"
 
     def test_default_is_false(self):
         msg = json.loads(protocol.state_msg())
         assert msg["d"]["claude"] is False
+        assert msg["d"]["host"] == "codex"
+
+    def test_custom_host(self):
+        msg = json.loads(protocol.state_msg(True, host="claude"))
+        assert msg["d"]["host"] == "claude"
 
 
 # ---------------------------------------------------------------------------
