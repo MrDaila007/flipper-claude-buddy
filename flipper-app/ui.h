@@ -55,6 +55,13 @@ typedef enum {
     PoseDenied,    // droopy eyes, downturned mouth (permission denied)
 } CharacterPose;
 
+typedef enum {
+    HostTypeUnknown = 0,
+    HostTypeClaude,
+    HostTypeCodex,
+    HostTypeCursor,
+} HostType;
+
 typedef void (*UiEventCallback)(UiEventType event, const char* data, void* context);
 
 // View model structs (stored inside each View's model allocation)
@@ -71,6 +78,7 @@ typedef struct {
     bool space_hold_active; // true while Up long-press is held for hold-space input
     uint8_t pose;           // CharacterPose
     uint8_t anim_frame;     // animation counter (incremented by timer)
+    uint8_t host_type;      // HostType — bridge identity (Claude/Codex/Cursor)
     uint8_t transport_mode; // 0 = USB, 1 = BT (shown in header)
     uint8_t rssi_bars;      // BLE signal bars 0–4 (only used when transport_mode == 1)
 } StatusModel;
@@ -131,6 +139,7 @@ void ui_show_status2(UiState* ui, const char* text, const char* subtext, bool co
 void ui_show_menu(UiState* ui);
 void ui_show_listening(UiState* ui);
 void ui_set_claude_connected(UiState* ui, bool connected);
+void ui_set_host_type(UiState* ui, uint8_t host_type);
 void ui_set_pose(UiState* ui, uint8_t pose);
 void ui_set_transport_mode(UiState* ui, bool is_bt);
 void ui_update_menu(UiState* ui, const char* pipe_delimited);
