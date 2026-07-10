@@ -45,11 +45,14 @@ typedef enum {
     PoseIdle,      // default: periodic blink
     PoseListening, // eyes up, header shows REC indicator
     PoseThinking,  // eyes right, animated dots above head
+    PoseWorking,   // eyes down, typing motion (tool use / active work)
     PoseHappy,     // squinted eyes + smile + sparkles, brief bounce (auto-resets)
     PoseAlert,     // wide eyes, blinking ! + horizontal shake (auto-resets)
     PoseSleeping,  // closed eyes, floating z
     PoseExcited,   // arms raised, fast bounce, cycling sparkles (auto-resets)
     PoseWorried,   // shifty eyes, sweat drop, gentle wobble (used on perm screen)
+    PoseCompacting,// squished body + inward arrows (context compaction)
+    PoseDenied,    // droopy eyes, downturned mouth (permission denied)
 } CharacterPose;
 
 typedef void (*UiEventCallback)(UiEventType event, const char* data, void* context);

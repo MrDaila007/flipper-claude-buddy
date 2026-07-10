@@ -91,7 +91,8 @@ static void anim_tick(void* context) {
     StatusModel* sm = view_get_model(ui->status_view);
     sm->anim_frame++;
     // Auto-reset transient poses after ~3s (20 frames * 150ms)
-    if((sm->pose == PoseHappy || sm->pose == PoseAlert || sm->pose == PoseExcited) &&
+    if((sm->pose == PoseHappy || sm->pose == PoseAlert || sm->pose == PoseExcited ||
+        sm->pose == PoseDenied) &&
        sm->anim_frame > 20) {
         sm->pose = PoseIdle;
         sm->anim_frame = 0;
@@ -230,6 +231,9 @@ static uint8_t rssi_to_bars(int rssi) {
 }
 
 static void draw_claude(Canvas* canvas, int cx, int cy, uint8_t pose, uint8_t frame) {
+    int body_w = 18;
+    int body_h = 10;
+
     // ── Pose-specific body offsets ──
     if(pose == PoseHappy) {
         // Gentle bounce: up for first 4 frames
@@ -250,21 +254,45 @@ static void draw_claude(Canvas* canvas, int cx, int cy, uint8_t pose, uint8_t fr
         // Gentle horizontal wobble: ±1px every 3 frames
         cx += (frame % 6 < 3) ? 1 : -1;
     }
+    if(pose == PoseWorking) {
+        cy += (frame % 3 == 0) ? -1 : 0;
+    }
+    if(pose == PoseCompacting) {
+        int beat = 4;
+        if(frame % beat < beat / 2) {
+            body_w = 16;
+            body_h = 9;
+            cy += 1;
+        } else {
+            body_w = 20;
+            body_h = 8;
+        }
+    }
+    if(pose == PoseDenied) {
+        cy += 1;
+    }
 
     canvas_set_color(canvas, ColorBlack);
 
-    // Body (18x10 rectangle - the Claude Code icon)
-    canvas_draw_box(canvas, cx, cy, 18, 10);
+    // Body
+    canvas_draw_box(canvas, cx, cy, body_w, body_h);
 
     // Ears (single dots on each side)
-    canvas_draw_dot(canvas, cx - 1, cy + 4);
-    canvas_draw_dot(canvas, cx + 18, cy + 4);
+    canvas_draw_dot(canvas, cx - 1, cy + body_h / 2);
+    canvas_draw_dot(canvas, cx + body_w, cy + body_h / 2);
 
-    // Legs (4 lines of 2px, 1px gap below body)
-    canvas_draw_line(canvas, cx + 4, cy + 11, cx + 4, cy + 12);
-    canvas_draw_line(canvas, cx + 6, cy + 11, cx + 6, cy + 12);
-    canvas_draw_line(canvas, cx + 12, cy + 11, cx + 12, cy + 12);
-    canvas_draw_line(canvas, cx + 14, cy + 11, cx + 14, cy + 12);
+    // Legs — extend on alternating beats for Working / Thinking foot-tap
+    int leg_extend = 0;
+    if(pose == PoseWorking && (frame % 4 < 2)) leg_extend = 1;
+    if(pose == PoseThinking && (frame % 6 < 3)) leg_extend = 1;
+    int leg_y0 = cy + body_h + 1;
+    int leg_y1 = cy + body_h + 1 + leg_extend;
+    int leg_l = cx + body_w / 2 - 5;
+    int leg_r = cx + body_w / 2 + 1;
+    canvas_draw_line(canvas, leg_l, leg_y0, leg_l, leg_y1);
+    canvas_draw_line(canvas, leg_l + 2, leg_y0, leg_l + 2, leg_y1);
+    canvas_draw_line(canvas, leg_r, leg_y0, leg_r, leg_y1);
+    canvas_draw_line(canvas, leg_r + 2, leg_y0, leg_r + 2, leg_y1);
 
     // ── Eyes (white cutouts, vary by pose & frame) ──
     canvas_set_color(canvas, ColorWhite);
@@ -293,6 +321,11 @@ static void draw_claude(Canvas* canvas, int cx, int cy, uint8_t pose, uint8_t fr
         // Eyes shifted right (looking at status text)
         canvas_draw_box(canvas, cx + 5, cy + 3, 2, 3);
         canvas_draw_box(canvas, cx + 13, cy + 3, 2, 3);
+        break;
+
+    case PoseWorking:
+        canvas_draw_box(canvas, cx + 5, cy + 4, 2, 2);
+        canvas_draw_box(canvas, cx + 11, cy + 4, 2, 2);
         break;
 
     case PoseHappy:
@@ -324,9 +357,27 @@ static void draw_claude(Canvas* canvas, int cx, int cy, uint8_t pose, uint8_t fr
         canvas_draw_box(canvas, cx + 12 + shift, cy + 3, 2, 3);
         break;
     }
+
+    case PoseCompacting:
+        canvas_draw_box(canvas, cx + 3, cy + 2, 2, 3);
+        canvas_draw_box(canvas, cx + body_w - 5, cy + 2, 2, 3);
+        break;
+
+    case PoseDenied:
+        canvas_draw_line(canvas, cx + 4, cy + 4, cx + 5, cy + 4);
+        canvas_draw_line(canvas, cx + 12, cy + 4, cx + 13, cy + 4);
+        canvas_draw_dot(canvas, cx + 4, cy + 5);
+        canvas_draw_dot(canvas, cx + 13, cy + 5);
+        break;
     }
 
     canvas_set_color(canvas, ColorBlack);
+
+    if(pose == PoseDenied) {
+        canvas_draw_line(canvas, cx + 7, cy + 8, cx + 10, cy + 8);
+        canvas_draw_dot(canvas, cx + 8, cy + 9);
+        canvas_draw_dot(canvas, cx + 9, cy + 9);
+    }
 
     // ── Extra animations outside the body ──
     switch(pose) {
@@ -336,6 +387,16 @@ static void draw_claude(Canvas* canvas, int cx, int cy, uint8_t pose, uint8_t fr
         if(phase >= 1) canvas_draw_dot(canvas, cx + 10, cy - 3);
         if(phase >= 2) canvas_draw_dot(canvas, cx + 13, cy - 3);
         if(phase >= 3) canvas_draw_dot(canvas, cx + 16, cy - 3);
+        break;
+    }
+    case PoseWorking: {
+        int key_phase = frame % 6;
+        if(key_phase < 2)
+            canvas_draw_line(canvas, cx + 5, cy + body_h + 3, cx + 7, cy + body_h + 3);
+        if(key_phase >= 2 && key_phase < 4)
+            canvas_draw_line(canvas, cx + 9, cy + body_h + 3, cx + 11, cy + body_h + 3);
+        if(key_phase >= 4)
+            canvas_draw_line(canvas, cx + 13, cy + body_h + 3, cx + 15, cy + body_h + 3);
         break;
     }
     case PoseAlert: {
@@ -351,7 +412,7 @@ static void draw_claude(Canvas* canvas, int cx, int cy, uint8_t pose, uint8_t fr
         canvas_set_font(canvas, FontSecondary);
         int zy = cy - 2 - ((frame % 10) / 2);
         if(zy > HDR_H) {
-            canvas_draw_str(canvas, cx + 16, zy, "z");
+            canvas_draw_str(canvas, cx + body_w - 2, zy, "z");
         }
         break;
     }
@@ -361,16 +422,16 @@ static void draw_claude(Canvas* canvas, int cx, int cy, uint8_t pose, uint8_t fr
             if(frame % 5 < 4)
                 draw_sparkle(canvas, cx - 3, cy + 5);
             if((frame + 2) % 5 < 4)
-                draw_sparkle(canvas, cx + 21, cy + 5);
+                draw_sparkle(canvas, cx + body_w + 3, cy + 5);
         }
         break;
     }
     case PoseExcited: {
         // Arms raised (lines from body sides pointing up-outward)
         canvas_draw_line(canvas, cx - 1, cy + 3, cx - 3, cy + 1);
-        canvas_draw_line(canvas, cx + 18, cy + 3, cx + 20, cy + 1);
+        canvas_draw_line(canvas, cx + body_w, cy + 3, cx + body_w + 2, cy + 1);
         // 4 sparkles cycling in with staggered phases
-        const int8_t sp_dx[] = {-4, 21, 5, 14};
+        const int8_t sp_dx[] = {-4, (int8_t)(body_w + 3), 5, (int8_t)(body_w - 4)};
         const int8_t sp_dy[] = {4, 4, -5, -5};
         for(int i = 0; i < 4; i++) {
             if((frame + i * 3) % 8 < 6)
@@ -381,12 +442,28 @@ static void draw_claude(Canvas* canvas, int cx, int cy, uint8_t pose, uint8_t fr
     case PoseWorried: {
         // Sweat drop (upper-right of body, animated drip)
         int drop_y = cy - 1 + (frame % 4) / 2; // slowly slides down
-        canvas_draw_dot(canvas, cx + 17, drop_y);
-        canvas_draw_dot(canvas, cx + 16, drop_y + 1);
-        canvas_draw_dot(canvas, cx + 18, drop_y + 1);
-        canvas_draw_dot(canvas, cx + 17, drop_y + 2);
+        canvas_draw_dot(canvas, cx + body_w - 1, drop_y);
+        canvas_draw_dot(canvas, cx + body_w - 2, drop_y + 1);
+        canvas_draw_dot(canvas, cx + body_w, drop_y + 1);
+        canvas_draw_dot(canvas, cx + body_w - 1, drop_y + 2);
         break;
     }
+    case PoseCompacting:
+        if(frame % 4 < 2) {
+            canvas_draw_line(canvas, cx - 4, cy + 4, cx - 1, cy + 4);
+            canvas_draw_dot(canvas, cx - 2, cy + 3);
+            canvas_draw_dot(canvas, cx - 2, cy + 5);
+            canvas_draw_line(canvas, cx + body_w + 3, cy + 4, cx + body_w, cy + 4);
+            canvas_draw_dot(canvas, cx + body_w + 1, cy + 3);
+            canvas_draw_dot(canvas, cx + body_w + 1, cy + 5);
+        }
+        break;
+    case PoseDenied:
+        if(frame % 8 < 4) {
+            canvas_draw_line(canvas, cx + body_w / 2 - 1, cy - 4, cx + body_w / 2 + 1, cy - 2);
+            canvas_draw_line(canvas, cx + body_w / 2 + 1, cy - 4, cx + body_w / 2 - 1, cy - 2);
+        }
+        break;
     default:
         break;
     }

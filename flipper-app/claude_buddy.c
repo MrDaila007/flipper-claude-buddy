@@ -386,12 +386,16 @@ static void process_message(App* app, ProtocolMessage* msg) {
         } else if(snd == SoundVoiceStop || snd == SoundVoiceStopQuiet) {
             app->dictating = false;
             ui_set_pose(app->ui, PoseIdle);
-        } else if(snd == SoundSuccess || snd == SoundReady) {
+        } else if(snd == SoundSuccess || snd == SoundReady || snd == SoundCompactDone) {
             ui_set_pose(app->ui, PoseHappy);
         } else if(snd == SoundConnect) {
             ui_set_pose(app->ui, PoseExcited);
-        } else if(snd == SoundError || snd == SoundAlert || snd == SoundInterrupt) {
+        } else if(snd == SoundLedCompact) {
+            ui_set_pose(app->ui, PoseCompacting);
+        } else if(snd == SoundError || snd == SoundInterrupt) {
             ui_set_pose(app->ui, PoseAlert);
+        } else if(snd == SoundAlert) {
+            ui_set_pose(app->ui, app->is_working ? PoseWorking : PoseAlert);
         } else if(snd == SoundSessionEnd) {
             ui_set_pose(app->ui, PoseSleeping);
         }
@@ -768,6 +772,7 @@ static void on_ui_event(UiEventType event, const char* data, void* context) {
         bool esc = (event == UiEventPermEsc);
         notify_play(app->notifications, SoundLedOff, LedStateOff);
         app_notify(app, allow ? SoundSuccess : SoundEsc);
+        ui_set_pose(app->ui, allow ? PoseHappy : PoseDenied);
 
         if(app->current_ble_mode == BleModeDesktop && app->last_perm_id[0]) {
             /* Anthropic protocol only has once/deny — collapse Always/Allow
